@@ -35,13 +35,14 @@ class Application extends BaseApplication
         }
 
         // Symfony Console 8.0+ uses addCommand(), earlier versions use add()
+        // @phpstan-ignore-next-line function.alreadyNarrowedType - method_exists result depends on installed Symfony version
         if (method_exists(BaseApplication::class, 'addCommand')) {
             return parent::addCommand($command);
         }
 
         // For Symfony Console < 8.0, ensure we only pass Command instances
         if (!$command instanceof Command) {
-            throw new \InvalidArgumentException('Command must be an instance of ' . Command::class . ' for Symfony Console < 8.0');
+            throw new \InvalidArgumentException('Command must be an instance of '.Command::class.' for Symfony Console < 8.0');
         }
 
         return parent::add($command);
