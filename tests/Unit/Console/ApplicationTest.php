@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace FriendsOfTwig\Twigcs\Tests\Unit\Console;
 
-use FriendsOfTwig\Twigcs\Container;
 use FriendsOfTwig\Twigcs\Console\Application;
 use FriendsOfTwig\Twigcs\Console\ContainerAwareCommand;
 use FriendsOfTwig\Twigcs\Console\LintCommand;
 use FriendsOfTwig\Twigcs\Console\RegDebugCommand;
+use FriendsOfTwig\Twigcs\Container;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Console\Application as BaseApplication;
 use Symfony\Component\Console\Command\Command;
@@ -98,55 +98,49 @@ final class ApplicationTest extends TestCase
         self::assertTrue($application->has('regular:command'));
     }
 
-    public function testAddCommandFallsBackToAddWhenAddCommandDoesNotExist(): void
+    public function testAddCommandWithSymfony80Plus(): void
     {
-        // Create a test Application class that simulates Symfony Console < 8.0
-        // by implementing the same logic but testing the fallback path
-        $legacyApplication = new class('test', '1.0.0') extends BaseApplication {
-            private Container $container;
+        // Skip this test if we're not on Symfony 8.0+
+        if (!method_exists(BaseApplication::class, 'addCommand')) {
+            self::markTestSkipped('This test requires Symfony Console 8.0+');
+        }
 
-            public function __construct(string $name = 'test', string $version = '1.0.0')
-            {
-                parent::__construct($name, $version);
-                $this->container = new Container();
-            }
+        $application = new Application(false);
+        $command = new Command('test:command');
 
-            /**
-             * This method simulates Application::addCommand() but forces the fallback to add()
-             * by checking a different class name that doesn't have addCommand
-             */
-            public function addCommandLegacy(callable|Command $command): ?Command
-            {
-                if ($command instanceof ContainerAwareCommand) {
-                    $command->setContainer($this->container);
-                }
-
-                // Force the fallback path by checking a class that doesn't have addCommand
-                // We use stdClass which definitely doesn't have addCommand
-                if (!method_exists(\stdClass::class, 'addCommand')) {
-                    // For Symfony Console < 8.0, ensure we only pass Command instances
-                    if (!$command instanceof Command) {
-                        throw new \InvalidArgumentException('Command must be an instance of ' . Command::class . ' for Symfony Console < 8.0');
-                    }
-                    return parent::add($command);
-                }
-
-                return parent::addCommand($command);
-            }
-        };
-
-        // Test that the fallback to add() works correctly
-        $command = new Command('legacy:test');
-        $result = $legacyApplication->addCommandLegacy($command);
+        $result = $application->addCommand($command);
 
         self::assertSame($command, $result);
-        self::assertTrue($legacyApplication->has('legacy:test'));
+        self::assertTrue($application->has('test:command'));
 
         // Test that ContainerAwareCommand gets its container set
         $containerAwareCommand = new RegDebugCommand();
         self::assertNull($containerAwareCommand->getContainer());
 
-        $legacyApplication->addCommandLegacy($containerAwareCommand);
+        $application->addCommand($containerAwareCommand);
+        self::assertNotNull($containerAwareCommand->getContainer());
+    }
+
+    public function testAddCommandFallsBackToAddWithSymfonyBefore80(): void
+    {
+        // Skip this test if we're on Symfony 8.0+
+        if (method_exists(BaseApplication::class, 'addCommand')) {
+            self::markTestSkipped('This test requires Symfony Console < 8.0');
+        }
+
+        $application = new Application(false);
+        $command = new Command('test:command');
+
+        $result = $application->addCommand($command);
+
+        self::assertSame($command, $result);
+        self::assertTrue($application->has('test:command'));
+
+        // Test that ContainerAwareCommand gets its container set
+        $containerAwareCommand = new RegDebugCommand();
+        self::assertNull($containerAwareCommand->getContainer());
+
+        $application->addCommand($containerAwareCommand);
         self::assertNotNull($containerAwareCommand->getContainer());
 
         // Test that callable throws exception on old versions
@@ -156,6 +150,6 @@ final class ApplicationTest extends TestCase
 
         $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage('Command must be an instance of');
-        $legacyApplication->addCommandLegacy($callable);
+        $application->addCommand($callable);
     }
 }
